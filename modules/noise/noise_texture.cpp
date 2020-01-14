@@ -31,6 +31,7 @@
 #include "noise_texture.h"
 
 #include "core/core_string_names.h"
+#include "noise.h"
 
 NoiseTexture::NoiseTexture() {
 	update_queued = false;
@@ -39,12 +40,13 @@ NoiseTexture::NoiseTexture() {
 	first_time = true;
 
 	size = Vector2i(512, 512);
+	invert = false;
 	seamless = false;
 	as_normalmap = false;
 	bump_strength = 8.0;
 	flags = FLAGS_DEFAULT;
 
-	noise = Ref<OpenSimplexNoise>();
+	noise = Ref<Noise>();
 
 	texture = VS::get_singleton()->texture_create();
 
@@ -67,6 +69,9 @@ void NoiseTexture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_noise", "noise"), &NoiseTexture::set_noise);
 	ClassDB::bind_method(D_METHOD("get_noise"), &NoiseTexture::get_noise);
 
+	ClassDB::bind_method(D_METHOD("set_invert", "invert"), &NoiseTexture::set_invert);
+	ClassDB::bind_method(D_METHOD("get_invert"), &NoiseTexture::get_invert);
+
 	ClassDB::bind_method(D_METHOD("set_seamless", "seamless"), &NoiseTexture::set_seamless);
 	ClassDB::bind_method(D_METHOD("get_seamless"), &NoiseTexture::get_seamless);
 
@@ -83,10 +88,11 @@ void NoiseTexture::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "width", PROPERTY_HINT_RANGE, "1,2048,1,or_greater"), "set_width", "get_width");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "height", PROPERTY_HINT_RANGE, "1,2048,1,or_greater"), "set_height", "get_height");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "invert"), "set_invert", "get_invert");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "seamless"), "set_seamless", "get_seamless");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "as_normalmap"), "set_as_normalmap", "is_normalmap");
 	ADD_PROPERTY(PropertyInfo(Variant::REAL, "bump_strength", PROPERTY_HINT_RANGE, "0,32,0.1,or_greater"), "set_bump_strength", "get_bump_strength");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "noise", PROPERTY_HINT_RESOURCE_TYPE, "OpenSimplexNoise"), "set_noise", "get_noise");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "noise", PROPERTY_HINT_RESOURCE_TYPE, "Noise"), "set_noise", "get_noise");
 }
 
 void NoiseTexture::_validate_property(PropertyInfo &property) const {
@@ -136,7 +142,7 @@ void NoiseTexture::_queue_update() {
 Ref<Image> NoiseTexture::_generate_texture() {
 
 	// Prevent memdelete due to unref() on other thread.
-	Ref<OpenSimplexNoise> ref_noise = noise;
+	Ref<Noise> ref_noise = noise;
 
 	if (ref_noise.is_null()) {
 		return Ref<Image>();
@@ -145,9 +151,9 @@ Ref<Image> NoiseTexture::_generate_texture() {
 	Ref<Image> image;
 
 	if (seamless) {
-		image = ref_noise->get_seamless_image(size.x);
+		image = ref_noise->get_seamless_image(size.x, size.y, invert);
 	} else {
-		image = ref_noise->get_image(size.x, size.y);
+		image = ref_noise->get_image(size.x, size.y, invert);
 	}
 
 	if (as_normalmap) {
@@ -182,7 +188,7 @@ void NoiseTexture::_update_texture() {
 	update_queued = false;
 }
 
-void NoiseTexture::set_noise(Ref<OpenSimplexNoise> p_noise) {
+void NoiseTexture::set_noise(Ref<Noise> p_noise) {
 	if (p_noise == noise)
 		return;
 	if (noise.is_valid()) {
@@ -195,7 +201,7 @@ void NoiseTexture::set_noise(Ref<OpenSimplexNoise> p_noise) {
 	_queue_update();
 }
 
-Ref<OpenSimplexNoise> NoiseTexture::get_noise() {
+Ref<Noise> NoiseTexture::get_noise() {
 	return noise;
 }
 
@@ -206,13 +212,29 @@ void NoiseTexture::set_width(int p_width) {
 }
 
 void NoiseTexture::set_height(int p_height) {
-	if (p_height == size.y) return;
+	if (p_height == size.y) {
+		return;
+	}
 	size.y = p_height;
 	_queue_update();
 }
 
+void NoiseTexture::set_invert(bool p_invert) {
+	if (p_invert == invert) {
+		return;
+	}
+	invert = p_invert;
+	_queue_update();
+}
+
+bool NoiseTexture::get_invert() const {
+	return invert;
+}
+
 void NoiseTexture::set_seamless(bool p_seamless) {
-	if (p_seamless == seamless) return;
+	if (p_seamless == seamless) {
+		return;
+	}
 	seamless = p_seamless;
 	_queue_update();
 }

@@ -1,0 +1,26 @@
+#!/usr/bin/env python
+
+Import("env")
+Import("env_modules")
+
+env_noise = env_modules.Clone()
+
+thirdparty_dir = "#thirdparty/noise/"
+
+thirdparty_sources = [
+    "FastNoise.cpp",
+    "open-simplex-noise.c",
+]
+
+thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
+
+env_noise.Prepend(CPPPATH=[thirdparty_dir])
+
+env_thirdparty = env_noise.Clone()
+env_thirdparty.disable_warnings()
+
+# Add sources
+
+env_thirdparty.add_source_files(env.modules_sources, thirdparty_sources)
+
+env_noise.add_source_files(env.modules_sources, "*.cpp")
