@@ -2399,13 +2399,15 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 	}
 }
 
-bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers) {
+bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers, uint64_t p_visibility_viewport_mask) {
 	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
 
 	Transform3D light_transform = p_instance->transform;
 	light_transform.orthonormalize(); //scale does not count on lights
 
 	bool animated_material_found = false;
+
+#define LIGHT_VIS_RANGE_CHECK ((instance->array_index == -1) || (p_scenario->instance_data[instance->array_index].visibility_index == -1) || (_visibility_range_check<false>(p_scenario->instance_visibility[p_scenario->instance_data[instance->array_index].visibility_index], p_cam_transform.origin, p_visibility_viewport_mask) == 0))
 
 	switch (RSG::light_storage->light_get_type(p_instance->base)) {
 		case RSE::LIGHT_DIRECTIONAL: {
@@ -2470,6 +2472,10 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 							if (instance->mesh_instance.is_valid()) {
 								RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
 							}
+						}
+
+						if (!LIGHT_VIS_RANGE_CHECK) {
+							continue;
 						}
 
 						shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
@@ -2555,6 +2561,10 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 							}
 						}
 
+						if (!LIGHT_VIS_RANGE_CHECK) {
+							continue;
+						}
+
 						shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
 					}
 
@@ -2624,6 +2634,11 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 						RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
 					}
 				}
+
+				if (!LIGHT_VIS_RANGE_CHECK) {
+					continue;
+				}
+
 				shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
 			}
 
@@ -2702,6 +2717,8 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			shadow_data.pass = 0;
 		}
 	}
+
+#undef LIGHT_VIS_RANGE_CHECK
 
 	return animated_material_found;
 }
@@ -3521,6 +3538,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		}
 
 		// Positional Shadows
+		uint64_t visibility_viewport_mask = scenario->viewport_visibility_masks.has(p_viewport) ? scenario->viewport_visibility_masks[p_viewport] : 0;
 		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
 			Instance *ins = scene_cull_result.lights[i];
 
@@ -3660,7 +3678,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
 				//must redraw!
 				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
-				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
+				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers, visibility_viewport_mask)) {
 					light->make_shadow_dirty();
 				}
 				RENDER_TIMESTAMP("< Render Light3D " + itos(i));
